@@ -1,5 +1,7 @@
 package org.apache.giraph.examples;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -18,11 +20,7 @@ public class BarycentricMessage implements Writable{
 	/**
 	* the first value of this message
 	*/
-	private double value1;
-	/**
-	 * the second value for this message
-	 */
-	private long value2;
+	private ArrayList<Double> values;
 	
 	public BarycentricMessage() {
 	}
@@ -35,32 +33,34 @@ public class BarycentricMessage implements Writable{
 	* @param destinationId the id of the destination vertex between which the
 	* hops count will be calculated
 	*/
-	public BarycentricMessage(long sourceId, double value1, long value2) {
+	public BarycentricMessage(long sourceId, ArrayList<Double> values) {
 		this.sourceId = sourceId;
-		this.value1 = value1;
-		this.value2 = value2;
+		this.values = values;
 	}
 	
 	public long getSourceId() {
 		return this.sourceId;
 	}
-	public double getValue1() {
-		return this.value1;
+	public ArrayList<Double> getvalues() {
+		return this.values;
 	}
-	public long getValue2(){
-		return this.value2;
-	}
+
 	
 	@Override
 	public void write(DataOutput dataOutput) throws IOException {
 		dataOutput.writeLong(this.sourceId);
-		dataOutput.writeDouble(this.value1);
-		dataOutput.writeLong(this.value2);
+		dataOutput.writeInt(this.values.size());
+		for(Double d: this.values){
+			dataOutput.writeDouble(d);
+		}
 	}
 	@Override
 	public void readFields(DataInput dataInput) throws IOException {
 		this.sourceId = dataInput.readLong();
-		this.value1 = dataInput.readDouble();
-		this.value2 = dataInput.readLong();
+		int length = dataInput.readInt();
+		this.values = new ArrayList<Double>();
+		for(int i = 0; i < length; i++){
+			this.values.add(dataInput.readDouble());
+		}
 	}
 }

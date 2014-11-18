@@ -1,133 +1,189 @@
 package org.apache.giraph.examples;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
+import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 
 public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritable, BarycentricMessage> {
 
 	private double degree;
-	private Map<Long, Double> edge_lengths;
+	//position vector for this vertex, index i holds the position on the ith round
+	private ArrayList<Double> values = new ArrayList<Double>();
+	private HashMap<Long, Double> edge_lengths = new HashMap<Long, Double>();;
+	private double neighborhood_sum;
 	
 	@Override
 	public void compute(Iterable<BarycentricMessage> messages) throws IOException {
-		// TODO Auto-generated method stub
+		//compute degree
 		if(getSuperstep() == 0){
 			double total = 0;
 			for(Edge<LongWritable, DoubleWritable> e : getEdges()){
 				total += e.getValue().get();
 			}
+			//initialize position vector with 1 slot for each restart and random normally distributed values
+			int restarts =  (int) BarycentricMaster.RESTARTS.get(getConf());
+			Random r = new Random();
+			for(int i = 0; i < restarts; i++){
+				this.values.add(r.nextGaussian());
+			}
+			this.degree = total;
+			//send initial position updates
+			sendMessageToAllEdges(new BarycentricMessage(getId().get(), this.values));
+			//set initial connected component for later
+			setValue(new DoubleWritable(getId().get()));
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.UPDATE_POSITION)){
-			update_position(messages);
+			update_values(messages);
 		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.COMPUTE_EDGE_LENGTHS_1)){
-			//each vertex is responsible for the edges of which it is the minimum vertex id
-			//we only need to send our position if we are not responsible for the edge
-			for(Edge<LongWritable, DoubleWritable> e : getEdges()){
-				if(e.getTargetVertexId().compareTo(getId()) < 0){
-					sendMessage(e.getTargetVertexId(), new BarycentricMessage(getId().get(), getValue().get(), 0));
-				}
-			}
-		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.COMPUTE_EDGE_LENGTHS_2)){
-			//based on the positions which were sent in the last step, compute the edge lengths
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.COMPUTE_EDGE_LENGTHS)){
 			compute_edge_lengths(messages);
+			compute_neighborhood();
 		}
+		//TODO: implement slackening
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_1)){
-			compute_neighborhood();
 		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_2)){
-			cut__or_slacken_edges(messages);
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES)){
+			cut_edges(messages);
 		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_1)){
-			compute_neighborhood();
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.FIND_COMPONENTS)){
+			find_components(messages);
 		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_2)){
-			cut__or_slacken_edges(messages);
-		}
+		//TODO: implement cleanup
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CLEANUP_1)){
-			sendMessageToAllEdges(new BarycentricMessage(getId().get(), getValue().get(), 0));
-		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CLEANUP_2)){
-			//TODO:implement clean up here
 			
 		}
-		
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CLEANUP_2)){
+			
+		}
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.HALT)){
+			voteToHalt();
+		}
 	}
 	
 	/**
-	 * Recompute the position of this vertex based on the positions
-	 * of its neighbors.
+	 * Recompute the position of this vertex based on the values
+	 * of its neighbors. Perform this for all restarts in parallel.
 	 * 
 	 * @param messages Messages containing the id of their sender vertex and
-	 * the position of that vertex
+	 * the position vector of that vertex
 	 */
-	public void update_position(Iterable<BarycentricMessage> messages){
-		double new_pos = 0;
-		for(BarycentricMessage m : messages){
-			new_pos += (getEdgeValue(new LongWritable(m.getSourceId())).get() * m.getValue1()) / (this.degree + 1); 
+	public void update_values(Iterable<BarycentricMessage> messages){
+		//perform the self position updates for each restart
+		for(int i = 0; i < this.values.size(); i++){
+			double curr = this.values.get(i);
+			this.values.set(i, curr / (this.degree + 1));
 		}
-		new_pos += getValue().get() / (this.degree + 1);
-		setValue(new DoubleWritable(new_pos));
-		sendMessageToAllEdges(new BarycentricMessage(getId().get(), new_pos, 0));
+		//average the neighbors for each restart
+		for(BarycentricMessage m : messages){
+			//for this neighbor update the position for all the restarts
+			List<Double> pos_updates = m.getvalues();
+			for(int i = 0; i < pos_updates.size(); i++){
+				double curr = this.values.get(i);
+				this.values.set(i, curr + getEdgeValue(new LongWritable(m.getSourceId())).get() * pos_updates.get(i) / (this.degree + 1));
+			} 
+		}
+		sendMessageToAllEdges(new BarycentricMessage(getId().get(), this.values));
 	}
 	
 	/**
-	 * Compute the edge lengths for this run and add the information
-	 * to the running total stored in the hash map
+	 * Compute the average edge lengths for all runs
+	 * and add this information to the hash map for edge lengths
 	 * 
 	 * @param messages Messages containing the id of their sender vertex and
 	 * the position of that vertex
 	 */
 	public void compute_edge_lengths(Iterable<BarycentricMessage> messages){
-		long source_id;
 		for(BarycentricMessage m : messages){
-			source_id = m.getSourceId();
-			edge_lengths.put(source_id, 
-					edge_lengths.get(source_id) + Math.abs(m.getValue1() - getValue().get() ));
+			//average the length of this edge over all restarts
+			double avg = 0;
+			List<Double> neighbor_values = m.getvalues();
+			for(int i = 0; i < this.values.size(); i++){
+				avg += Math.abs(this.values.get(i) - neighbor_values.get(i));
+			}
+			avg /= this.values.size();
+			this.edge_lengths.put(m.getSourceId(), avg);
 		}
 	}
 	
 	/**
-	 * compute the neighborhood of this vertex to be used in slackening or cutting of edges
+	 * Compute the neighborhood of this vertex to be used in slackening or cutting of edges
 	 */
 	public void compute_neighborhood(){
-		//compute average of the one hop neighborhood and send this to appropriate vertexes
+		//compute sum and size of the one hop neighborhood and send this to appropriate vertexes
+		//we only need to send this information to vertexes with lower degree, otherwise we
+		//are responsible for the edge
+		double sum = 0;
+		for(Edge<LongWritable, DoubleWritable> e: getEdges()){
+			sum += edge_lengths.get(e.getTargetVertexId().get());
+		}
+		this.neighborhood_sum = sum;
+		long id = getId().get();
 		for(Edge<LongWritable, DoubleWritable> e : getEdges()){
 			if(e.getTargetVertexId().compareTo(getId()) < 0){
-				sendMessage(e.getTargetVertexId(), new BarycentricMessage(getId().get(), getValue().get(), getTotalNumEdges()));
+				ArrayList<Double> l = new ArrayList<Double>();
+				l.add(sum);
+				l.add((double)getNumEdges());
+				sendMessage(e.getTargetVertexId(), new BarycentricMessage(id, l));
 			}
 		}
 	}
+	
 	/**
 	 * Delete those edges from the graph whose score is positive (are longer than average)
 	 *  
 	 * @param messages Messages containing the id of their sender vertex and
-	 * the neighborhood value of the vertex and the out degree value of the vertex
+	 * the neighborhood sum value of the vertex and the out degree value of the vertex
+	 * based on this information we can determine whether to cut the edge
 	 * 
 	 * @throws IOException 
 	 */
-	public void cut__or_slacken_edges(Iterable<BarycentricMessage> messages) throws IOException{
-		double avg;
+	public void cut_edges(Iterable<BarycentricMessage> messages) throws IOException{
+		double avg, sum, size;
+		//for each message we receive we are responsible for cutting that edge
 		for(BarycentricMessage m : messages){
-			avg = (m.getValue1() + this.degree - getEdgeValue(new LongWritable(m.getSourceId())).get()) 
-					/ (m.getValue2() + getTotalNumEdges() - 1);
+			List<Double> l = m.getvalues();
+			sum = l.get(0);
+			size = l.get(1);
+			avg = (this.neighborhood_sum - edge_lengths.get(m.getSourceId()) + sum)
+					/ (getNumEdges() + size - 1);
 			if(edge_lengths.get(m.getSourceId()) > avg){
-				if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_2)){
 					//remove both edges
 					removeEdgesRequest(getId(), new LongWritable(m.getSourceId()));
 					removeEdgesRequest(new LongWritable(m.getSourceId()), getId());
-				}
-				else{
-					//slacken both edges
-					//TODO: slacken here
-				}
 			}
+			//begin WCC traversal
+			else{
+				sendMessage(new LongWritable(m.getSourceId()), new BarycentricMessage(getId().get(), new ArrayList<Double>()));
+			}
+		}
+	}
+	
+	/**
+	 * Simple WCC algorithm to find the clusters after the edges have been cut
+	 * @param messages
+	 * @throws IOException
+	 */
+	public void find_components(Iterable<BarycentricMessage> messages) throws IOException{
+		boolean changed = false;
+		for(BarycentricMessage m : messages){
+			if(m.getSourceId() < getValue().get()){
+				setValue(new DoubleWritable(m.getSourceId()));
+				changed = true;
+				
+			}
+		}
+		if(changed){
+			aggregate(BarycentricMaster.TRAVERSAL_AGGREGATOR, new BooleanWritable(true));
+			sendMessageToAllEdges(new BarycentricMessage((long)getValue().get(), new ArrayList<Double>()));
 		}
 	}
 
