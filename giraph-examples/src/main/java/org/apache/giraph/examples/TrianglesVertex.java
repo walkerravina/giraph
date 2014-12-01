@@ -79,7 +79,7 @@ public class TrianglesVertex extends Vertex<IntWritable, Text, DoubleWritable, T
 					aggregate_count++;
 				}
 			}
-			double clustering_coeff = 2.0 * local_count / (this.true_degree * (this.true_degree - 1));
+			double clustering_coeff = 2.0 * local_count / (this.true_degree * (this.true_degree - 1)) / (double) getTotalNumVertices();
 			setValue(new Text(local_count + ", " + clustering_coeff));
 			aggregate(TrianglesVertexMaster.TOTAL_TRIANGLES_AGGREGATOR, new IntWritable(aggregate_count));
 			aggregate(TrianglesVertexMaster.GLOBAL_CLUSTERING_COEFF, new DoubleWritable(clustering_coeff));

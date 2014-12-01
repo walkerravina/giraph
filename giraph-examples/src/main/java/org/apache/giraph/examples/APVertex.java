@@ -4,11 +4,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.giraph.edge.Edge;
+import org.apache.giraph.examples.SimpleSuperstepVertex.SimpleSuperstepVertexReader;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.log4j.Logger;
+import org.mortbay.log.Log;
 
 /**
  * Vertex for performing Affinity Propagation Clustering on a data set
@@ -21,15 +24,13 @@ import org.apache.hadoop.io.Text;
  */
 public class APVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritable, APMessage>{
 
-	private Map<Long, Double> old_responsibilities;
-	private Map<Long, Double> old_availabilities;
+	private Map<Long, Double> old_responsibilities = new HashMap<Long, Double>();
+	private Map<Long, Double> old_availabilities = new HashMap<Long, Double>();
+	private static final Logger LOG = Logger.getLogger(APVertex.class);
 	
 	@Override
 	public void compute(Iterable<APMessage> messages) throws IOException {
 		if(getSuperstep() == 0){
-			//Initialize maps
-			old_responsibilities = new HashMap<Long, Double>();
-			old_availabilities = new HashMap<Long, Double>();
 			//the first round of updates are special since the availabilities start at 0
 			double value;
 			for(Edge<LongWritable, DoubleWritable> e: getEdges()){
@@ -57,28 +58,47 @@ public class APVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritabl
 		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.ASSIGNMENT)){
 			//determine cluster and vote to halt, this step can only happen when messages contain availabilities
 			compute_assignment(messages);
+			//if we are going to check consistency then send message to exemplar notifying them that we have chosen them
+			if(APMaster.CONSISTENCY.get(getConf())){
+				sendMessage(new LongWritable((long)getValue().get()), new APMessage(getId().get(),0));
+			}
 		}
-		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.CHECK_CONSISTENCY_1)){
-			//notify  my exemplar that I have chosen them
-			sendMessage(new LongWritable((long)getValue().get()), new APMessage(0,0));
-		}
-		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.CHECK_CONSISTENCY_2)){
+		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.CHECK_CONSISTENCY)){
 			//aggregate a true value if the label is not consistent with being an exemplar
 			if(messages.iterator().hasNext() && 
 					!(new LongWritable((long)getValue().get())).equals(getId())){
 				aggregate(APMaster.CONSISTENCY_AGGREGATOR, new BooleanWritable(true));
-			}
-			//if this point has chosen itself as an exemplar add it to the list of possible
-			//exemplars for kmedoids
-			if((new LongWritable((long)getValue().get())).equals(getId())){
-				aggregate(APMaster.KMEDOIDS_AGGREGATOR, new Text(getId().get() + ","));
+				//also notify all of the points that they need to choose some one else
+				for(APMessage m : messages){
+					sendMessage(new LongWritable(m.getSourceId()), new APMessage(getId().get(), 0));
+				}
 			}
 		}
-		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.KMEDOIDS)){
-			kmedoids_selection();
+		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.KMEDOIDS_1)){
+			//if any messages are being received than it means our original exemplar choice is not valid
+			//so we must choose a new exemplar from the available ones, in this round we look at all our neighbors
+			//and ask which ones are suitable
+			if(messages.iterator().hasNext()){
+				for(Edge<LongWritable, DoubleWritable> e : getEdges()){
+					sendMessage(e.getTargetVertexId(), new APMessage(getId().get(), 0));
+				}				
+			}
+		}
+		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.KMEDOIDS_2)){
+			//respond to the above queries, with 1 indicating i am an exemplar and 0 indicating no
+			int resp_code = (new LongWritable((long)getValue().get())).equals(getId()) ? 1 : 0;
+			for(APMessage m : messages){
+				sendMessage(new LongWritable(m.getSourceId()), new APMessage(getId().get(), resp_code));
+			}
+		}
+		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.KMEDOIDS_3)){
+			//if any messages are being received it means our initial choice of exemplar
+			//was no good and we need to pick again, otherwise we are fine
+			if(messages.iterator().hasNext()){
+				kmedoids_selection(messages);	
+			}
 		}
 		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.HALT)){
-			System.out.println("about to halt");
 			voteToHalt();
 		}
 	}
@@ -176,7 +196,7 @@ public class APVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritabl
 			//r(i,k) + a(i,k)
 			total_value = getEdgeValue(new LongWritable(m1.getSourceId())).get() - resp_max_value + m1.getValue();
 			//store these values in the case of consistency checks for later
-			if(APMaster.CONVERGANCE.get(getConf())){
+			if(APMaster.CONSISTENCY.get(getConf())){
 				old_availabilities.put(m1.getSourceId(), m1.getValue());
 				old_responsibilities.put(m1.getSourceId(), total_value - m1.getValue());	
 			}
@@ -190,35 +210,22 @@ public class APVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritabl
 	
 	/**
 	 * Out of the available exemplars, choose the one which is optimal for this point
+	 * @param messages Messages containing integer flags indicating who is an exemplar
 	 */
-	public void kmedoids_selection(){
-		System.out.println("In Kmedoids selection");
-		String s = getAggregatedValue(APMaster.KMEDOIDS_AGGREGATOR).toString();
-		if(s.equals("")){
-			//flag indicating that no point chose itself as an exemplar and 
-			//thus sufficient iterations were not run
-			setValue(new DoubleWritable(Double.NaN));
-			return;
-		}
-		s = s.substring(0, s.length() - 2);
-		System.out.println(s);
-		String[] parts = s.split(",");
-		long best_k = 0, k = 0;
-		double best_value = Double.NEGATIVE_INFINITY, value = 0;
-		for(int i = 0; i < parts.length; i++){
-			System.out.println(parts[i]);
-			/*
-			 k = (long)Double.parseDouble(parts[i]);
-			if(old_availabilities.containsKey(k) && old_responsibilities.containsKey(k)){
-				 value = old_availabilities.get(k) + old_responsibilities.get(k);
-				if( value > best_value){
-					best_k = k;
-					best_value = value;
+	public void kmedoids_selection(Iterable<APMessage> messages){
+		//default to choosing ourself as an exemplar if no one else is suitable
+		long best_k = getId().get(), k = 0, id = (long) getValue().get();
+		double best_value = old_responsibilities.get(id) + old_availabilities.get(id), value = 0;
+		for(APMessage m : messages){
+			if(m.getValue() == 1){
+				value = old_responsibilities.get(m.getSourceId()) + old_availabilities.get(m.getSourceId());
+				if(value > best_value){
+					value = best_value;
+					best_k = m.getSourceId();
 				}
 			}
-			*/
 		}
-		setValue(new DoubleWritable(0));
+		setValue(new DoubleWritable(best_k));
 	}
 
 }

@@ -1,6 +1,7 @@
 package org.apache.giraph.examples;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import org.apache.giraph.edge.Edge;
@@ -13,6 +14,8 @@ import org.apache.hadoop.io.LongWritable;
 public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritable, KTrussesMessage>{
 
 	private boolean removed;
+	private ArrayList<Long> neighborhs = new ArrayList<Long>();
+	
 	@Override
 	public void compute(Iterable<KTrussesMessage> messages) throws IOException {
 		//first we assign each edge to a vertex, directing edges from low degree
@@ -40,11 +43,10 @@ public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleW
 			voteToHalt();
 		}
 		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.TRIANGLE_QUERY)){
-			System.out.print("Vertex " + getId() + ": ");
 			for(Edge<LongWritable, DoubleWritable> e1: getEdges()){
-				System.out.print(e1.getTargetVertexId() + ", ");
 				for(Edge<LongWritable, DoubleWritable> e2 : getEdges()){
-					if(e2.equals(e1)){
+					//ensure that we only consider each pair of edges once
+					if(e1.getTargetVertexId().compareTo(e2.getTargetVertexId()) >= 0){
 						continue;
 					}
 					//send a message to the vertex that would own the edge completing the hypothetical triangle
@@ -57,7 +59,6 @@ public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleW
 					}
 				}
 			}
-			System.out.println();
 		}
 		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.TRIANGLE_ANSWER)){
 			for(KTrussesMessage m : messages){
@@ -89,7 +90,6 @@ public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleW
 				long key = e.getTargetVertexId().get();
 				//remove edge if it is lacking support
 				if(!edge_support.containsKey(key) || edge_support.get(key) < K - 2){
-					System.out.println("Removing edge " + getId() + ", " + key);
 					removeEdges(new LongWritable(key));
 					aggregate(KTrussesMaster.EDGE_SUPPORT_AGGREGATOR, new BooleanWritable(true));
 				}
@@ -101,15 +101,27 @@ public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleW
 			}
 		}
 		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.REMOVE_NODES)){
-			//no edges pointing to this node
+			//no edges pointing to this node or coming out from this node
 			if(!messages.iterator().hasNext()){
 				this.removed = true;
 				//-1 is flag value for not in a k truss
 				setValue(new DoubleWritable(-1));
 			}
 		}
+		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.FIND_COMPONENTS_0)){
+			//make edges bidirectional again for the DFS
+			sendMessageToAllEdges(new KTrussesMessage(getId().get(), 0));
+		}
 		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.FIND_COMPONENTS_1)){
+			for(KTrussesMessage m : messages){
+				this.neighborhs.add(m.getSourceId());
+			}
 			sendMessageToAllEdges(new KTrussesMessage(getId().get(), getId().get()));
+			for(Long l : this.neighborhs){
+				sendMessage(new LongWritable(l), new KTrussesMessage(getId().get(), getId().get()));
+			}
+			setValue(new DoubleWritable(getId().get()));
+			voteToHalt();
 		}
 		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.FIND_COMPONENTS_2)){
 			boolean changed = false;
@@ -117,14 +129,14 @@ public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleW
 				if(m.getValue() < getValue().get()){
 					setValue(new DoubleWritable(m.getValue()));
 					changed = true;
-					aggregate(KTrussesMaster.TRAVERSAL_AGGREGATOR, new BooleanWritable(true));
 				}
 			}
 			if(changed){
 				sendMessageToAllEdges(new KTrussesMessage(getId().get(), (long)getValue().get()));
+				for(Long l : this.neighborhs){
+					sendMessage(new LongWritable(l), new KTrussesMessage(getId().get(), getId().get()));
+				}
 			}
-		}
-		else if(getAggregatedValue(KTrussesMaster.PHASE_AGGREGATOR).equals(KTrussesMaster.HALT)){
 			voteToHalt();
 		}
 	}
