@@ -14,12 +14,14 @@ public class BarycentricMaster extends DefaultMasterCompute {
 	
 	public static final IntWritable UPDATE_POSITION = new IntWritable(0);
 	public static final IntWritable COMPUTE_EDGE_LENGTHS = new IntWritable(1);
-	public static final IntWritable SLACKEN_1 = new IntWritable(3);
-	public static final IntWritable CUT_EDGES = new IntWritable(5);;
-	public static final IntWritable FIND_COMPONENTS = new IntWritable(7);
-	public static final IntWritable CLEANUP_1 = new IntWritable(8);
-	public static final IntWritable CLEANUP_2 = new IntWritable(9);
-	public static final IntWritable HALT = new IntWritable(10);
+	public static final IntWritable SLACKEN_1 = new IntWritable(2);
+	public static final IntWritable SLACKEN_2 = new IntWritable(3);
+	public static final IntWritable CUT_EDGES_1 = new IntWritable(4);
+	public static final IntWritable CUT_EDGES_2 = new IntWritable(5);
+	public static final IntWritable FIND_COMPONENTS = new IntWritable(6);
+	public static final IntWritable CLEANUP_1 = new IntWritable(7);
+	public static final IntWritable CLEANUP_2 = new IntWritable(8);
+	public static final IntWritable HALT = new IntWritable(9);
 	
 	public static final String PHASE_AGGREGATOR = "phase_aggregator";
 	public static final String ITERATIONS_AGGREGATOR = "iterations_aggregator";
@@ -32,27 +34,36 @@ public class BarycentricMaster extends DefaultMasterCompute {
 	public static final LongConfOption  ITERATIONS = new LongConfOption("BarycentricVertex.Iterations", 5);
 	public static final LongConfOption  RESTARTS = new LongConfOption("BarycentricVertex.Restarts", 2);
 	
-	private static int iterations = 0;
+	private static int cleanup_iterations = 0;
 	
 	public void compute(){
 		if(getAggregatedValue(PHASE_AGGREGATOR).equals(UPDATE_POSITION)
-				&& iterations > (int)ITERATIONS.get(getConf())){
+				&& getSuperstep() % (int)ITERATIONS.get(getConf()) == 0
+				&& getSuperstep() != 0){
 			setAggregatedValue(PHASE_AGGREGATOR, COMPUTE_EDGE_LENGTHS);
-			
 		}
 		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(UPDATE_POSITION)){
-			//update iterations, stay in position update phase
-			iterations++;
+			//stay in position update phase
 		}
 		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(COMPUTE_EDGE_LENGTHS)){
-			if(SLACKEN.get(getConf())){
+			//note ITERATIONS should be at least 2 to avoid potential off by one errors
+			if(SLACKEN.get(getConf()) && getSuperstep() < 2 * (int)ITERATIONS.get(getConf())){
 				setAggregatedValue(PHASE_AGGREGATOR, SLACKEN_1);
 			}
 			else{
-				setAggregatedValue(PHASE_AGGREGATOR, CUT_EDGES);	
+				setAggregatedValue(PHASE_AGGREGATOR, CUT_EDGES_1);	
 			}
 		}
-		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(CUT_EDGES)){
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(SLACKEN_1)){
+			setAggregatedValue(PHASE_AGGREGATOR, SLACKEN_2);
+		}
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(SLACKEN_2)){
+			setAggregatedValue(PHASE_AGGREGATOR, UPDATE_POSITION);
+		}
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(CUT_EDGES_1)){
+			setAggregatedValue(PHASE_AGGREGATOR, CUT_EDGES_2);
+		}
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(CUT_EDGES_2)){
 			setAggregatedValue(PHASE_AGGREGATOR, FIND_COMPONENTS);
 		}
 		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(FIND_COMPONENTS)
@@ -67,6 +78,16 @@ public class BarycentricMaster extends DefaultMasterCompute {
 			else{
 				setAggregatedValue(PHASE_AGGREGATOR, HALT);
 			}
+		}
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(CLEANUP_1) && cleanup_iterations >= CLEANUP.get(getConf())){
+			setAggregatedValue(PHASE_AGGREGATOR, HALT);
+		}
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(CLEANUP_1)&& cleanup_iterations < CLEANUP.get(getConf())){
+			setAggregatedValue(PHASE_AGGREGATOR, CLEANUP_2);
+		}
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(CLEANUP_2)){
+			setAggregatedValue(PHASE_AGGREGATOR, CLEANUP_1);
+			cleanup_iterations++;
 		}
 
 	}

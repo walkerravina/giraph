@@ -18,55 +18,111 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 	private double degree;
 	//position vector for this vertex, index i holds the position on the ith round
 	private ArrayList<Double> values = new ArrayList<Double>();
-	private HashMap<Long, Double> edge_lengths = new HashMap<Long, Double>();;
+	private HashMap<Long, Double> edge_lengths = new HashMap<Long, Double>();
 	private double neighborhood_sum;
+	public static int SLACKEN = 0;
+	public static int CUT = -1;
 	
 	@Override
 	public void compute(Iterable<BarycentricMessage> messages) throws IOException {
 		//compute degree
 		if(getSuperstep() == 0){
-			double total = 0;
-			for(Edge<LongWritable, DoubleWritable> e : getEdges()){
-				total += e.getValue().get();
-			}
-			//initialize position vector with 1 slot for each restart and random normally distributed values
-			int restarts =  (int) BarycentricMaster.RESTARTS.get(getConf());
-			Random r = new Random();
-			for(int i = 0; i < restarts; i++){
-				this.values.add(r.nextGaussian());
-			}
-			this.degree = total;
-			//send initial position updates
-			sendMessageToAllEdges(new BarycentricMessage(getId().get(), this.values));
-			//set initial connected component for later
-			setValue(new DoubleWritable(getId().get()));
+			setup();
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.UPDATE_POSITION)){
 			update_values(messages);
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.COMPUTE_EDGE_LENGTHS)){
+			System.out.println("Compute edge lengths");
 			compute_edge_lengths(messages);
 			compute_neighborhood();
 		}
 		//TODO: implement slackening
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_1)){
+			System.out.println("In slacken edge 1");
+			cut_or_slacken_edges(messages, this.SLACKEN);
 		}
-		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES)){
-			cut_edges(messages);
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_2)){
+			System.out.println("In slacken edge 2");
+			for(BarycentricMessage m : messages){
+				setEdgeValue(new LongWritable(m.getSourceId()), new DoubleWritable(m.getvalues().get(0)));
+			}
+			//start over after having slackened
+			setup();
+		}
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_1)){
+			System.out.println("In cute edge 1");
+			cut_or_slacken_edges(messages, this.CUT);
+		}
+		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_2)){
+			System.out.println("in cut edges 2");
+			for(BarycentricMessage m : messages){
+				setEdgeValue(new LongWritable(m.getSourceId()), new DoubleWritable(m.getvalues().get(0)));
+			}
+			//start the wcc
+			for(Edge<LongWritable, DoubleWritable> e : getEdges()){
+				if(e.getValue().get() >= 0){
+					sendMessage(e.getTargetVertexId(),new BarycentricMessage((long)getValue().get(), new ArrayList<Double>()));
+				}
+			}
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.FIND_COMPONENTS)){
 			find_components(messages);
 		}
-		//TODO: implement cleanup
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CLEANUP_1)){
-			
+			int max = 0, second_max = 0, count = 0;
+			long max_cluster = 0;
+			Map<Long, Integer> cluster_edge_count = new HashMap<Long, Integer>();
+			for(BarycentricMessage m : messages){
+				if(cluster_edge_count.containsKey(m.getSourceId())){
+					count = cluster_edge_count.get(m.getSourceId()) + 1;
+					cluster_edge_count.put(m.getSourceId(), count);
+				}
+				else{
+					count = 1;
+					cluster_edge_count.put(m.getSourceId(), count);
+				}
+				if(count > max){
+					max = count;
+					second_max = max;
+					max_cluster = m.getSourceId();
+				}
+			}
+			if(max > 2 * second_max){
+				setValue(new DoubleWritable(max_cluster));
+			}
+			sendMessageToAllEdges(new BarycentricMessage(getId().get(), new ArrayList<Double>()));
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CLEANUP_2)){
-			
+			for(BarycentricMessage m : messages){
+				sendMessage(new LongWritable(m.getSourceId()), new BarycentricMessage((long)getValue().get(), new ArrayList<Double>()));
+			}
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.HALT)){
 			voteToHalt();
 		}
+	}
+	
+	/**
+	 * Setup function used at the very start and after slackening
+	 */
+	public void setup(){
+		double total = 0;
+		for(Edge<LongWritable, DoubleWritable> e : getEdges()){
+			total += e.getValue().get();
+		}
+		//initialize position vector with 1 slot for each restart and random normally distributed values
+		int restarts =  (int) BarycentricMaster.RESTARTS.get(getConf());
+		Random r = new Random();
+		this.values.clear();
+		for(int i = 0; i < restarts; i++){
+			this.values.add(r.nextGaussian());
+		}
+		this.degree = total;
+		//send initial position updates
+		sendMessageToAllEdges(new BarycentricMessage(getId().get(), this.values));
+		//set initial connected component for later
+		setValue(new DoubleWritable(getId().get()));
 	}
 	
 	/**
@@ -119,7 +175,7 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 	 */
 	public void compute_neighborhood(){
 		//compute sum and size of the one hop neighborhood and send this to appropriate vertexes
-		//we only need to send this information to vertexes with lower degree, otherwise we
+		//we only need to send this information to vertexes with lower id, otherwise we
 		//are responsible for the edge
 		double sum = 0;
 		for(Edge<LongWritable, DoubleWritable> e: getEdges()){
@@ -142,13 +198,13 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 	 *  
 	 * @param messages Messages containing the id of their sender vertex and
 	 * the neighborhood sum value of the vertex and the out degree value of the vertex
-	 * based on this information we can determine whether to cut the edge
+	 * based on this information we can determine whether to cut or slacken the edge
 	 * 
 	 * @throws IOException 
 	 */
-	public void cut_edges(Iterable<BarycentricMessage> messages) throws IOException{
+	public void cut_or_slacken_edges(Iterable<BarycentricMessage> messages, int type) throws IOException{
 		double avg, sum, size;
-		//for each message we receive we are responsible for cutting that edge
+		//for each message we receive we are responsible for cutting or slackening that edge
 		for(BarycentricMessage m : messages){
 			List<Double> l = m.getvalues();
 			sum = l.get(0);
@@ -156,19 +212,18 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 			avg = (this.neighborhood_sum - edge_lengths.get(m.getSourceId()) + sum)
 					/ (getNumEdges() + size - 1);
 			if(edge_lengths.get(m.getSourceId()) > avg){
-					//remove both edges
-					removeEdgesRequest(getId(), new LongWritable(m.getSourceId()));
-					removeEdgesRequest(new LongWritable(m.getSourceId()), getId());
-			}
-			//begin WCC traversal
-			else{
-				sendMessage(new LongWritable(m.getSourceId()), new BarycentricMessage(getId().get(), new ArrayList<Double>()));
+					//set the value of our edge, and notify our neighbor of the value they need to set a new value for the edge
+					setEdgeValue(new LongWritable(m.getSourceId()), new DoubleWritable(type));
+					ArrayList<Double> val = new ArrayList<Double>();
+					val.add((double)type);
+					sendMessage(new LongWritable(m.getSourceId()), new BarycentricMessage(getId().get(), val));
 			}
 		}
 	}
 	
+	
 	/**
-	 * Simple WCC algorithm to find the clusters after the edges have been cut
+	 * Simple WCC algorithm to find the clusters after the edges have been cut, we don't traverse cut edges
 	 * @param messages
 	 * @throws IOException
 	 */
@@ -183,7 +238,11 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 		}
 		if(changed){
 			aggregate(BarycentricMaster.TRAVERSAL_AGGREGATOR, new BooleanWritable(true));
-			sendMessageToAllEdges(new BarycentricMessage((long)getValue().get(), new ArrayList<Double>()));
+			for(Edge<LongWritable, DoubleWritable> e : getEdges()){
+				if(e.getValue().get() >= 0){
+					sendMessage(e.getTargetVertexId(),new BarycentricMessage((long)getValue().get(), new ArrayList<Double>()));
+				}
+			}
 		}
 	}
 
