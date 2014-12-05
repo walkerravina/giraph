@@ -8,6 +8,11 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Writable;
 
+/**
+ * Message for the Barycentric Vertex class
+ * @author cloudera
+ *
+ */
 public class BarycentricMessage implements Writable{
 	
 	public static final int POSITION = 0;
@@ -28,10 +33,8 @@ public class BarycentricMessage implements Writable{
 	* Constructor used by {@link org.apache.giraph.examples
 	* .SimpleHopsComputation}
 	*
-	* @param sourceId the id of the source vertex which wants to
-	* calculate the hops count
-	* @param destinationId the id of the destination vertex between which the
-	* hops count will be calculated
+	* @param sourceId the id of the source vertex 
+	* @param values the array of values for this message
 	*/
 	public BarycentricMessage(long sourceId, ArrayList<Double> values) {
 		this.sourceId = sourceId;

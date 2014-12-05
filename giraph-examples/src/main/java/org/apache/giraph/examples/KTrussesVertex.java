@@ -10,7 +10,11 @@ import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 
-
+/**
+ * Vertex for finding the K-Trussess of a graph
+ * @author Walker Ravina
+ *
+ */
 public class KTrussesVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritable, KTrussesMessage>{
 
 	private boolean removed;

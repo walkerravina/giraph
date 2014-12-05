@@ -43,10 +43,8 @@ public class SCC_B_Message implements Writable {
 	* Constructor used by {@link org.apache.giraph.examples
 	* .SimpleHopsComputation}
 	*
-	* @param sourceId the id of the source vertex which wants to
-	* calculate the hops count
-	* @param destinationId the id of the destination vertex between which the
-	* hops count will be calculated
+	* @param sourceId the id of the source vertex 
+	* @param type the type of the message (either forward or backward)
 	*/
 	public SCC_B_Message(int sourceId, int type) {
 		this.sourceId = sourceId;

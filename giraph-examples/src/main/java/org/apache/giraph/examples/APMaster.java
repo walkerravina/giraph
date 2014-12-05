@@ -50,7 +50,6 @@ public class APMaster extends DefaultMasterCompute{
 	 */
 	public static final String PHASE_AGGREGATOR = "phase_aggregator";
 	public static final String CONSISTENCY_AGGREGATOR = "consistency_aggregator";
-	public static final String KMEDOIDS_AGGREGATOR = "kmedoids_aggregator";
 	
 	@Override
 	public void compute(){
@@ -92,6 +91,7 @@ public class APMaster extends DefaultMasterCompute{
 				&& getAggregatedValue(CONSISTENCY_AGGREGATOR).equals(new BooleanWritable(false))){
 			setAggregatedValue(PHASE_AGGREGATOR, HALT);
 		}
+		//if we need to clean up inconsistencies then progress through the 3 parts and halt
 		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(KMEDOIDS_1)){
 			setAggregatedValue(PHASE_AGGREGATOR, KMEDOIDS_2);
 		}
@@ -107,8 +107,7 @@ public class APMaster extends DefaultMasterCompute{
 	public void initialize() throws InstantiationException, IllegalAccessException{
 		//Aggregator for tracking the phases between different parts of the algorithm
 		registerPersistentAggregator(PHASE_AGGREGATOR, IntSumAggregator.class);
+		//Aggregator for checking the consistency of exemplar choices
 		registerAggregator(CONSISTENCY_AGGREGATOR, BooleanOrAggregator.class);
-		registerPersistentAggregator(KMEDOIDS_AGGREGATOR, TextAppendAggregator.class);
-		setAggregatedValue(KMEDOIDS_AGGREGATOR, new Text());
 	}
 }

@@ -14,10 +14,10 @@ import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 
 /**
- *  Master for performing Barycentric Clustering on the input graph
+ *  Vertex class for performing Barycentric Clustering on the input graph
  * the edge weights are assumed to have already been normalized.
  * 
- * @author walkerravina
+ * @author Walker Ravina
  *
  */
 public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritable, BarycentricMessage> {
@@ -25,14 +25,16 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 	private double degree;
 	//position vector for this vertex, index i holds the position on the ith round
 	private ArrayList<Double> values = new ArrayList<Double>();
+	//other bookkeeping information
 	private HashMap<Long, Double> edge_lengths = new HashMap<Long, Double>();
 	private double neighborhood_sum;
 	public static int SLACKEN = 0;
 	public static int CUT = -1;
+
 	
 	@Override
 	public void compute(Iterable<BarycentricMessage> messages) throws IOException {
-		//compute degree
+		//choose the appropriate task to perform based on the phase
 		if(getSuperstep() == 0){
 			setup();
 		}
@@ -43,7 +45,6 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 			compute_edge_lengths(messages);
 			compute_neighborhood();
 		}
-		//TODO: implement slackening
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_1)){
 			cut_or_slacken_edges(messages, this.SLACKEN);
 		}
@@ -71,6 +72,8 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.FIND_COMPONENTS)){
 			find_components(messages);
 		}
+		//use the cleanup criteria that a vertex changes cluster if it
+		//has twice as many edges to that cluster as the every other cluster it is connected to
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CLEANUP_1)){
 			int max = 0, second_max = 0, count = 0;
 			long max_cluster = 0;
@@ -85,8 +88,8 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 					cluster_edge_count.put(m.getSourceId(), count);
 				}
 				if(count > max){
-					max = count;
 					second_max = max;
+					max = count;
 					max_cluster = m.getSourceId();
 				}
 			}
@@ -196,7 +199,7 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 	}
 	
 	/**
-	 * Delete those edges from the graph whose score is positive (are longer than average)
+	 * Mark those edges from the graph whose score is positive (are longer than average)
 	 *  
 	 * @param messages Messages containing the id of their sender vertex and
 	 * the neighborhood sum value of the vertex and the out degree value of the vertex
@@ -226,7 +229,7 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 	
 	/**
 	 * Simple WCC algorithm to find the clusters after the edges have been cut, we don't traverse cut edges
-	 * @param messages
+	 * @param messages Messages containing labels for the standard WCC algorithm
 	 * @throws IOException
 	 */
 	public void find_components(Iterable<BarycentricMessage> messages) throws IOException{

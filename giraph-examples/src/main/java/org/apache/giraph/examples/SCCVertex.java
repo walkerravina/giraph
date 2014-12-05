@@ -34,14 +34,19 @@ public class SCCVertex extends Vertex <IntWritable, IntWritable, NullWritable, I
 					transposeNeighbors.add(new IntWritable(n.get()));
 				}
 			}
-			else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.FOWARD_TRAVERSAL_START)){
+			else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.TRIMMING)){
 				setValue(getId());
-				sendMessageToAllEdges(getValue());
+				if(this.transposeNeighbors.size() == 0 || getNumEdges() == 0){
+					this.inActive = true;
+				}
+				else{
+					sendMessageToAllEdges(getValue());
+				}
 			}
 			else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.FOWARD_TRAVERSAL_MAIN)){
 				boolean valueChanged = false;
 				for(IntWritable n : messages){
-					if(n.compareTo(getValue()) < 0){
+					if(n.get() - getValue().get() < 0){
 						setValue(n);
 						valueChanged = true;
 					}
@@ -52,7 +57,7 @@ public class SCCVertex extends Vertex <IntWritable, IntWritable, NullWritable, I
 				}
 			}
 			else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.BACKWARD_TRAVERSAL_START)){
-				if(getValue().equals(getId())){
+				if(getValue().get() == getId().get()){
 					inActive = true;
 					for(IntWritable v: transposeNeighbors){
 						sendMessage(v, getValue());
@@ -62,7 +67,7 @@ public class SCCVertex extends Vertex <IntWritable, IntWritable, NullWritable, I
 			else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.BACKWARD_TRAVERSAL_MAIN)){
 				boolean colorsMatch = false;
 				for(IntWritable n: messages){
-					colorsMatch = colorsMatch || (n.compareTo(getValue()) == 0);
+					colorsMatch = colorsMatch || (n.get() == getValue().get());
 				}
 				if(colorsMatch){;
 					inActive = true;
