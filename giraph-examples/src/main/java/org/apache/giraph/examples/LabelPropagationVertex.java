@@ -48,10 +48,6 @@ import java.util.Map;
  *
  * http://www.cs.cmu.edu/~ukang/papers/PegasusKAIS.pdf
  */
-@Algorithm(
-    name = "Hello World",
-    description = "Prints hello world for each vertex"
-)
 public class LabelPropagationVertex extends Vertex<IntWritable,
     IntWritable, NullWritable, LongWritable> {
 	private Map<Integer, Integer> labelCounter = new HashMap<Integer, Integer>();

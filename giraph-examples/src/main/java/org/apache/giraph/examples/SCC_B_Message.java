@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 /**
 * Message-Type used by SCC_B Vertex for communication.
+* @author Walker Ravina
 */
 public class SCC_B_Message implements Writable {
 	/**

@@ -37,11 +37,10 @@ public class APMessage implements Writable {
 	public APMessage() {
 	}
 	/**
-	* Constructor used by {@link org.apache.giraph.examples
-	* .SimpleHopsComputation}
+	* 
 	*
 	* @param sourceId the id of the source vertex 
-	* @param destinationId the value of the message to be used in calculations
+	* @param value The value to be used in calculations
 	*/
 	public APMessage(long sourceId, double value) {
 		this.sourceId = sourceId;

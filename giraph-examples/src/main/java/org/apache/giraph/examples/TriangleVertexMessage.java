@@ -21,7 +21,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 /**
-* Message-Type used by KTrusses Vertex for communication.
+* Message-Type used by Triangle Vertex for communication.
+* @author Walker Ravina
 */
 public class TriangleVertexMessage implements Writable {
 	/**
@@ -37,13 +38,9 @@ public class TriangleVertexMessage implements Writable {
 	public TriangleVertexMessage() {
 	}
 	/**
-	* Constructor used by {@link org.apache.giraph.examples
-	* .SimpleHopsComputation}
 	*
-	* @param sourceId the id of the source vertex which wants to
-	* calculate the hops count
-	* @param destinationId the id of the destination vertex between which the
-	* hops count will be calculated
+	* @param sourceId the id of the source vertex
+	* @param value the value being sent
 	*/
 	public TriangleVertexMessage(int sourceId, int value) {
 		this.sourceId = sourceId;

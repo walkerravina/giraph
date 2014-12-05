@@ -10,7 +10,9 @@ import org.apache.hadoop.io.Writable;
 
 /**
  * Message for the Barycentric Vertex class
- * @author cloudera
+ * For implementation of Jonathan Cohen's Barycentric Clustering
+ * http://www.cslu.ogi.edu/~zak/cs506-pslc/barycentric.pdf
+ * @author Walker Ravina
  *
  */
 public class BarycentricMessage implements Writable{
@@ -30,8 +32,7 @@ public class BarycentricMessage implements Writable{
 	public BarycentricMessage() {
 	}
 	/**
-	* Constructor used by {@link org.apache.giraph.examples
-	* .SimpleHopsComputation}
+	* 
 	*
 	* @param sourceId the id of the source vertex 
 	* @param values the array of values for this message

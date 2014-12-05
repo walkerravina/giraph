@@ -44,7 +44,7 @@ public class SCC_B_Vertex extends Vertex <IntWritable, IntWritable, NullWritable
 					transposeNeighbors.add(new IntWritable(m.getSourceId()));
 				}
 			}
-			//ask neighbors if they are there
+			//tell neighbors we are there
 			else if(getAggregatedValue(SCC_B_Master.PHASE_AGGREGATOR).equals(SCC_B_Master.TRIMMING_1)){
 				sendMessageToAllEdges(new SCC_B_Message(getId().get(), SCC_B_Message.FOWARD));
 				for(IntWritable v : this.transposeNeighbors){

@@ -14,6 +14,8 @@ import org.apache.hadoop.io.Text;
 /**
  * Master Vertex for performing Affinity Propagation clustering on a data set
  * 
+ * Implementation of Delbert Dueck's Affinity Propagation algorithm
+ * http://www.psi.toronto.edu/index.php?q=affinity%20propagation
  * @author Walker Ravina
  *
  */

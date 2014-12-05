@@ -19,6 +19,9 @@ import org.mortbay.log.Log;
  * The input graph need not be complete, missing similarities of form s(i,k) are treated
  * as having value of negative infinity
  * 
+ * Implementation of Delbert Dueck's Affinity Propagation algorithm
+ * http://www.psi.toronto.edu/index.php?q=affinity%20propagation
+ * 
  * @author Walker Ravina
  *
  */

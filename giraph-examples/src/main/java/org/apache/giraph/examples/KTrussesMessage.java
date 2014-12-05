@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 /**
 * Message-Type used by KTrusses Vertex for communication.
+* @author Walker Ravina
 */
 public class KTrussesMessage implements Writable {
 	/**
@@ -37,8 +38,6 @@ public class KTrussesMessage implements Writable {
 	public KTrussesMessage() {
 	}
 	/**
-	* Constructor used by {@link org.apache.giraph.examples
-	* .SimpleHopsComputation}
 	*
 	* @param sourceId the id of the source vertex which wants to
 	* calculate the hops count

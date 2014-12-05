@@ -11,6 +11,9 @@ import org.apache.hadoop.io.IntWritable;
 /**
  * Master for performing Barycentric Clustering on the input graph
  * the edge weights are assumed to have already been normalized.
+ * 
+ * Implementation of Jonathan Cohen's Barycentric Clustering algorithm 
+ * http://www.cslu.ogi.edu/~zak/cs506-pslc/barycentric.pdf
  * @author Walker Ravina
  *
  */
