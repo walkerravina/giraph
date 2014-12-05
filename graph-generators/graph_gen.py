@@ -1,5 +1,6 @@
 import random
 import networkx as nx
+import sys
 
 def clique_grid(h, w, k):
     G = nx.DiGraph()
@@ -37,3 +38,14 @@ def save_graph(G, path):
     f = open(path, "w")
     f.write("\n".join(nx.generate_adjlist(G)))
     f.close()
+
+def main():
+    type = sys.argv[1]
+    path = sys.argv[2]
+    if type == 'clique':
+        G = clique_grid(int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
+        save_graph(G, path)
+    elif type == 'communities':
+        G = communities(int(sys.argv[3]), int(sys.argv[4]))
+        save_graph(G, path)
+main()

@@ -2,14 +2,18 @@ package org.apache.giraph.examples;
 
 import org.apache.giraph.aggregators.BooleanOrAggregator;
 import org.apache.giraph.aggregators.IntSumAggregator;
-import org.apache.giraph.aggregators.TextAppendAggregator;
 import org.apache.giraph.conf.BooleanConfOption;
 import org.apache.giraph.conf.LongConfOption;
 import org.apache.giraph.master.DefaultMasterCompute;
 import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
 
+/**
+ * Master for performing Barycentric Clustering on the input graph
+ * the edge weights are assumed to have already been normalized.
+ * @author walkerravina
+ *
+ */
 public class BarycentricMaster extends DefaultMasterCompute {
 	
 	public static final IntWritable UPDATE_POSITION = new IntWritable(0);

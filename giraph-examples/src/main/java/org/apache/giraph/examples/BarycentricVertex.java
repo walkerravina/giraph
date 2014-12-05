@@ -13,6 +13,13 @@ import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 
+/**
+ *  Master for performing Barycentric Clustering on the input graph
+ * the edge weights are assumed to have already been normalized.
+ * 
+ * @author walkerravina
+ *
+ */
 public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritable, BarycentricMessage> {
 
 	private double degree;
@@ -33,17 +40,14 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 			update_values(messages);
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.COMPUTE_EDGE_LENGTHS)){
-			System.out.println("Compute edge lengths");
 			compute_edge_lengths(messages);
 			compute_neighborhood();
 		}
 		//TODO: implement slackening
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_1)){
-			System.out.println("In slacken edge 1");
 			cut_or_slacken_edges(messages, this.SLACKEN);
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.SLACKEN_2)){
-			System.out.println("In slacken edge 2");
 			for(BarycentricMessage m : messages){
 				setEdgeValue(new LongWritable(m.getSourceId()), new DoubleWritable(m.getvalues().get(0)));
 			}
@@ -51,11 +55,9 @@ public class BarycentricVertex extends Vertex<LongWritable, DoubleWritable, Doub
 			setup();
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_1)){
-			System.out.println("In cute edge 1");
 			cut_or_slacken_edges(messages, this.CUT);
 		}
 		else if(getAggregatedValue(BarycentricMaster.PHASE_AGGREGATOR).equals(BarycentricMaster.CUT_EDGES_2)){
-			System.out.println("in cut edges 2");
 			for(BarycentricMessage m : messages){
 				setEdgeValue(new LongWritable(m.getSourceId()), new DoubleWritable(m.getvalues().get(0)));
 			}
