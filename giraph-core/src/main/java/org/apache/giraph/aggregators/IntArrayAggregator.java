@@ -2,7 +2,11 @@ package org.apache.giraph.aggregators;
 
 import org.apache.giraph.utils.IntArrayWritable;
 
-
+/**
+ * Class for aggregating an array of integers
+ * @author Walker Ravina
+ *
+ */
 public class IntArrayAggregator extends BasicAggregator<IntArrayWritable> {
 
 	@Override

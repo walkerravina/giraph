@@ -7,6 +7,11 @@ import java.util.ArrayList;
 
 import org.apache.hadoop.io.Writable;
 
+/**
+ * Class for storing an array of integer values that implements writable
+ * @author Walker Ravina
+ *
+ */
 public class IntArrayWritable implements Writable {
 
 	private ArrayList<Integer> list;
