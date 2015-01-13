@@ -1,6 +1,8 @@
 package org.apache.giraph.examples;
 import java.io.IOException;
 import java.util.ArrayList;
+
+import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.IntWritable;
@@ -30,40 +32,67 @@ private boolean inActive = false;
 				transposeNeighbors.add(new IntWritable(n.get()));
 			}
 		}
-		else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.FOWARD_TRAVERSAL_START)){
-			setValue(getId());
+		else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.TRIMMING_1)){
 			sendMessageToAllEdges(getValue());
+			for(IntWritable v: transposeNeighbors){
+				sendMessage(v, new IntWritable(getValue().get()));
+			}
+		}
+		else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.TRIMMING_2)){
+			int forward_count = 0, backward_count = 0;
+			for(IntWritable m : messages){
+				if(contains_id_transpose(m)){
+					backward_count++;
+				}
+				if(contains_id_forward(m)){
+					forward_count++;
+				}
+				if(forward_count > 0 && backward_count > 0){
+					break;
+				}
+			}
+			setValue(getId());
+			if(forward_count == 0 || backward_count == 0){
+				this.inActive = true;
+				voteToHalt();
+			}
+			else{
+				sendMessageToAllEdges(getValue());
+			}
 		}
 		else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.FOWARD_TRAVERSAL_MAIN)){
 			boolean valueChanged = false;
 			for(IntWritable n : messages){
 				if(n.compareTo(getValue()) < 0){
-					setValue(n);
+					setValue(new IntWritable(n.get()));
 					valueChanged = true;
 				}
 			}
 			if(valueChanged){
-				sendMessageToAllEdges(getValue());
+				sendMessageToAllEdges(new IntWritable(getValue().get()));
 				aggregate(SCCMaster.TRAVERSAL_AGGREGATOR, new BooleanWritable(valueChanged));
 			}
 		}
 		else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.BACKWARD_TRAVERSAL_START)){
-		if(getValue().equals(getId())){
-		inActive = true;
-		for(IntWritable v: transposeNeighbors){
-		sendMessage(v, getValue());
-		}
-		}
+			if(getValue().equals(getId())){
+				inActive = true;
+				for(IntWritable v: transposeNeighbors){
+					sendMessage(v, new IntWritable(getValue().get()));
+				}
+			}
 		}
 		else if(getAggregatedValue(SCCMaster.PHASE_AGGREGATOR).equals(SCCMaster.BACKWARD_TRAVERSAL_MAIN)){
 			boolean colorsMatch = false;
 			for(IntWritable n: messages){
-				colorsMatch = colorsMatch || (n.compareTo(getValue()) == 0);
+				if(n.get() == getValue().get()){
+					colorsMatch = true;
+					break;
+				}
 			}
 			if(colorsMatch){;
 				inActive = true;
 				for(IntWritable v: transposeNeighbors){
-					sendMessage(v, getValue());
+					sendMessage(v, new IntWritable(getValue().get()));
 				}
 				aggregate(SCCMaster.TRAVERSAL_AGGREGATOR, new BooleanWritable(colorsMatch));
 			}
@@ -73,4 +102,22 @@ private boolean inActive = false;
 		voteToHalt();
 		}
 	}
+
+	public  boolean contains_id_transpose(IntWritable m){
+		for(IntWritable n : this.transposeNeighbors){
+			if(n.get() == m.get()){
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public boolean contains_id_forward(IntWritable m){
+		for(Edge<IntWritable, NullWritable> n : getEdges()){
+			if(n.getTargetVertexId().get() == m.get()){
+				return true;
+			}
+		}
+		return false;
+}
 }

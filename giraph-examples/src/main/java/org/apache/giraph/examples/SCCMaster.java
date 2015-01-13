@@ -16,18 +16,24 @@ import org.apache.hadoop.io.IntWritable;
 	public static final IntWritable FOWARD_TRAVERSAL_MAIN = new IntWritable(2);
 	public static final IntWritable BACKWARD_TRAVERSAL_START = new IntWritable(3);
 	public static final IntWritable BACKWARD_TRAVERSAL_MAIN = new IntWritable(4);
+	public static final IntWritable TRIMMING_1 = new IntWritable(5);
+	public static final IntWritable TRIMMING_2 = new IntWritable(6);
+	
 	//tracks the phase of the SCC algorithm
 	public static final String PHASE_AGGREGATOR = "SCC_PHASE_AGGREGATOR";
 	//track the progress of the forward and backward traversal by seeing if any changes are occurring
 	public static final String TRAVERSAL_AGGREGATOR = "SCC_FOWARD_TRAVERSAL_AGGREGATOR";
 	@Override
 	public void compute(){
-		//move from formation of the transpose graph to forward traversal start
+		//move from formation of the transpose graph to trimming
 		if(getSuperstep() == 2){
-			setAggregatedValue(PHASE_AGGREGATOR, FOWARD_TRAVERSAL_START);
+			setAggregatedValue(PHASE_AGGREGATOR, TRIMMING_1);
 		}
-		//always process one round
-		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(FOWARD_TRAVERSAL_START)){
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(TRIMMING_1)){
+			setAggregatedValue(PHASE_AGGREGATOR, TRIMMING_2);
+		}
+		//trimming 2 is also the start of the forward traversal
+		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(TRIMMING_2)){
 			setAggregatedValue(PHASE_AGGREGATOR, FOWARD_TRAVERSAL_MAIN);
 		}
 		//check for completion of forwards traversal
@@ -42,7 +48,7 @@ import org.apache.hadoop.io.IntWritable;
 		//check for completion of backwards traversal
 		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(BACKWARD_TRAVERSAL_MAIN) &&
 				getAggregatedValue(TRAVERSAL_AGGREGATOR).equals(new BooleanWritable(false))){
-			setAggregatedValue(PHASE_AGGREGATOR, FOWARD_TRAVERSAL_START);
+			setAggregatedValue(PHASE_AGGREGATOR, TRIMMING_1);
 			}
 		}
 		@Override

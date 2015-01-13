@@ -23,7 +23,7 @@ public class SCC_B_Vertex extends Vertex <IntWritable, IntWritable, NullWritable
 
 	//store the transpose graph
 	private ArrayList<IntWritable> transposeNeighbors = new ArrayList<IntWritable>();
-	//Queues to track the number of vertexes
+	//sets to track the number of vertexes
 	private HashSet<Integer> forward_values = new HashSet<Integer>();
 	private HashSet<Integer> backward_values = new HashSet<Integer>();
 	//once a vertex finds its SCC it becomes inactive and ignores all messages sent to it

@@ -62,7 +62,7 @@ public class SCC_B_Master extends DefaultMasterCompute {
 		//check for completion of traversals
 		else if(getAggregatedValue(PHASE_AGGREGATOR).equals(TRAVERSAL_MAIN) && 
 				getAggregatedValue(TRAVERSAL_AGGREGATOR).equals(new BooleanWritable(false))){
-			setAggregatedValue(PHASE_AGGREGATOR, TRAVERSAL_SELECTION_1);	
+			setAggregatedValue(PHASE_AGGREGATOR, TRIMMING_1);	
 		}
 	}
 	

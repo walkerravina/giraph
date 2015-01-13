@@ -59,7 +59,6 @@ public class APVertex extends Vertex<LongWritable, DoubleWritable, DoubleWritabl
 			update_availibilities(messages);
 		}
 		else if(getAggregatedValue(APMaster.PHASE_AGGREGATOR).equals(APMaster.ASSIGNMENT)){
-			//determine cluster and vote to halt, this step can only happen when messages contain availabilities
 			compute_assignment(messages);
 			//if we are going to check consistency then send message to exemplar notifying them that we have chosen them
 			if(APMaster.CONSISTENCY.get(getConf())){
